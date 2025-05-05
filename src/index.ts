@@ -1,0 +1,223 @@
+import { Command } from 'commander';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+    CallToolRequestSchema,
+    ErrorCode,
+    ListToolsRequestSchema,
+    McpError,
+} from '@modelcontextprotocol/sdk/types.js';
+import { SelfhostedSupabaseClient } from './client/index.js';
+import { listTablesTool } from './tools/list_tables.js';
+import { listExtensionsTool } from './tools/list_extensions.js';
+import { listMigrationsTool } from './tools/list_migrations.js';
+import { applyMigrationTool } from './tools/apply_migration.js';
+import { executeSqlTool } from './tools/execute_sql.js';
+import { getDatabaseConnectionsTool } from './tools/get_database_connections.js';
+import { getDatabaseStatsTool } from './tools/get_database_stats.js';
+import { getProjectUrlTool } from './tools/get_project_url.js';
+import { getAnonKeyTool } from './tools/get_anon_key.js';
+import { getServiceKeyTool } from './tools/get_service_key.js';
+import { generateTypesTool } from './tools/generate_typescript_types.js';
+import { rebuildHooksTool } from './tools/rebuild_hooks.js';
+import { verifyJwtSecretTool } from './tools/verify_jwt_secret.js';
+import { listAuthUsersTool } from './tools/list_auth_users.js';
+import { getAuthUserTool } from './tools/get_auth_user.js';
+import { deleteAuthUserTool } from './tools/delete_auth_user.js';
+import { createAuthUserTool } from './tools/create_auth_user.js';
+import { updateAuthUserTool } from './tools/update_auth_user.js';
+import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
+import type { ToolContext } from './tools/types.js';
+import listStorageBucketsTool from './tools/list_storage_buckets.js';
+import listStorageObjectsTool from './tools/list_storage_objects.js';
+import listRealtimePublicationsTool from './tools/list_realtime_publications.js';
+
+// Define the structure expected by MCP for tool definitions
+interface McpToolSchema {
+    name: string;
+    description?: string;
+    // inputSchema is the JSON Schema object for MCP capabilities
+    inputSchema: object; 
+}
+
+// Base structure for our tool objects - For Reference
+interface AppTool {
+    name: string;
+    description: string;
+    inputSchema: z.ZodTypeAny; // Zod schema for parsing
+    mcpInputSchema: object;    // Static JSON schema for MCP (Required)
+    outputSchema: z.ZodTypeAny; // Zod schema for output (optional)
+    execute: (input: unknown, context: ToolContext) => Promise<unknown>;
+}
+
+// Main function
+async function main() {
+    const program = new Command();
+
+    program
+        .name('self-hosted-supabase-mcp')
+        .description('MCP Server for self-hosted Supabase instances')
+        .option('--url <url>', 'Supabase project URL', process.env.SUPABASE_URL)
+        .option('--anon-key <key>', 'Supabase anonymous key', process.env.SUPABASE_ANON_KEY)
+        .option('--service-key <key>', 'Supabase service role key (optional)', process.env.SUPABASE_SERVICE_ROLE_KEY)
+        .option('--db-url <url>', 'Direct database connection string (optional, for pg fallback)', process.env.DATABASE_URL)
+        .option('--jwt-secret <secret>', 'Supabase JWT secret (optional, needed for some tools)', process.env.SUPABASE_AUTH_JWT_SECRET)
+        .parse(process.argv);
+
+    const options = program.opts();
+
+    if (!options.url) {
+        console.error('Error: Supabase URL is required. Use --url or SUPABASE_URL.');
+        throw new Error('Supabase URL is required.');
+    }
+    if (!options.anonKey) {
+        console.error('Error: Supabase Anon Key is required. Use --anon-key or SUPABASE_ANON_KEY.');
+        throw new Error('Supabase Anon Key is required.');
+    }
+
+    console.error('Initializing Self-Hosted Supabase MCP Server...');
+
+    try {
+        const selfhostedClient = await SelfhostedSupabaseClient.create({
+            supabaseUrl: options.url,
+            supabaseAnonKey: options.anonKey,
+            supabaseServiceRoleKey: options.serviceKey,
+            databaseUrl: options.dbUrl,
+            jwtSecret: options.jwtSecret,
+        });
+
+        console.error('Supabase client initialized successfully.');
+
+        const availableTools = {
+            // Cast here assumes tools will implement AppTool structure
+            [listTablesTool.name]: listTablesTool as AppTool,
+            [listExtensionsTool.name]: listExtensionsTool as AppTool,
+            [listMigrationsTool.name]: listMigrationsTool as AppTool,
+            [applyMigrationTool.name]: applyMigrationTool as AppTool,
+            [executeSqlTool.name]: executeSqlTool as AppTool,
+            [getDatabaseConnectionsTool.name]: getDatabaseConnectionsTool as AppTool,
+            [getDatabaseStatsTool.name]: getDatabaseStatsTool as AppTool,
+            [getProjectUrlTool.name]: getProjectUrlTool as AppTool,
+            [getAnonKeyTool.name]: getAnonKeyTool as AppTool,
+            [getServiceKeyTool.name]: getServiceKeyTool as AppTool,
+            [generateTypesTool.name]: generateTypesTool as AppTool,
+            [rebuildHooksTool.name]: rebuildHooksTool as AppTool,
+            [verifyJwtSecretTool.name]: verifyJwtSecretTool as AppTool,
+            [listAuthUsersTool.name]: listAuthUsersTool as AppTool,
+            [getAuthUserTool.name]: getAuthUserTool as AppTool,
+            [deleteAuthUserTool.name]: deleteAuthUserTool as AppTool,
+            [createAuthUserTool.name]: createAuthUserTool as AppTool,
+            [updateAuthUserTool.name]: updateAuthUserTool as AppTool,
+            [listStorageBucketsTool.name]: listStorageBucketsTool as AppTool,
+            [listStorageObjectsTool.name]: listStorageObjectsTool as AppTool,
+            [listRealtimePublicationsTool.name]: listRealtimePublicationsTool as AppTool,
+        };
+
+        // Prepare capabilities for the Server constructor
+        const capabilitiesTools: Record<string, McpToolSchema> = {};
+        for (const tool of Object.values(availableTools)) {
+            // Directly use mcpInputSchema - assumes it exists and is correct
+            const staticInputSchema = tool.mcpInputSchema || { type: 'object', properties: {} };
+
+            if (!tool.mcpInputSchema) { // Simple check if it was actually provided
+                 console.error(`Tool ${tool.name} is missing mcpInputSchema. Using default empty schema.`);
+            }
+
+            capabilitiesTools[tool.name] = {
+                name: tool.name,
+                description: tool.description || 'Tool description missing',
+                inputSchema: staticInputSchema,
+            };
+        }
+
+        const capabilities = { tools: capabilitiesTools };
+
+        console.error('Initializing MCP Server...');
+        const server = new Server(
+            {
+                name: 'self-hosted-supabase-mcp',
+                version: '1.0.0',
+            },
+            {
+                capabilities,
+            },
+        );
+
+        // The ListTools handler should return the array matching McpToolSchema structure
+        server.setRequestHandler(ListToolsRequestSchema, async () => ({
+            tools: Object.values(capabilities.tools),
+        }));
+
+        server.setRequestHandler(CallToolRequestSchema, async (request) => {
+            const toolName = request.params.name;
+            const tool = availableTools[toolName as keyof typeof availableTools];
+
+            if (!tool) {
+                throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
+            }
+
+            try {
+                if (typeof tool.execute !== 'function') {
+                    throw new Error(`Tool ${toolName} does not have an execute method.`);
+                }
+
+                let parsedArgs = request.params.arguments;
+                // Still use Zod schema for internal validation before execution
+                if (tool.inputSchema && typeof tool.inputSchema.parse === 'function') {
+                    parsedArgs = (tool.inputSchema as z.ZodTypeAny).parse(request.params.arguments);
+                }
+
+                // Create the context object using the imported type
+                const context: ToolContext = {
+                    selfhostedClient,
+                    log: (message, level = 'info') => {
+                        // Simple logger using console.error (consistent with existing logs)
+                        console.error(`[${level.toUpperCase()}] ${message}`);
+                    }
+                };
+
+                // Call the tool's execute method
+                // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+                const result = await tool.execute(parsedArgs as any, context);
+
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
+                        },
+                    ],
+                };
+            } catch (error: unknown) {
+                 console.error(`Error executing tool ${toolName}:`, error);
+                 let errorMessage = `Error executing tool ${toolName}: `;
+                 if (error instanceof z.ZodError) {
+                     errorMessage += `Input validation failed: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`;
+                 } else if (error instanceof Error) {
+                     errorMessage += error.message;
+                 } else {
+                     errorMessage += String(error);
+                 }
+                 return {
+                    content: [{ type: 'text', text: errorMessage }],
+                    isError: true,
+                 };
+            }
+        });
+
+        console.error('Starting MCP Server in stdio mode...');
+        const transport = new StdioServerTransport();
+        await server.connect(transport);
+        console.error('MCP Server connected to stdio.');
+
+    } catch (error) {
+        console.error('Failed to initialize or start the MCP server:', error);
+        throw error; // Rethrow to ensure the process exits non-zero if init fails
+    }
+}
+
+main().catch((error) => {
+    console.error('Unhandled error in main function:', error);
+    process.exit(1); // Exit with error code
+});
