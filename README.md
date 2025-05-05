@@ -122,6 +122,106 @@ npm start -- --url ... --anon-key ...
 
 The server communicates via standard input/output (stdio) and is designed to be invoked by an MCP client application (e.g., an IDE extension like Cursor). The client will connect to the server's stdio stream to list and call the available tools.
 
+## Client Configuration Examples
+
+Below are examples of how to configure popular MCP clients to use this self-hosted server. 
+
+**Important:** 
+*   Replace placeholders like `<your-supabase-url>`, `<your-anon-key>`, `<your-db-url>`, `<path-to-dist/index.js>` etc., with your actual values.
+*   Ensure the path to the compiled server file (`dist/index.js`) is correct for your system.
+*   Be cautious about storing sensitive keys directly in configuration files, especially if committed to version control. Consider using environment variables or more secure methods where supported by the client.
+
+### Cursor
+
+1.  Create or open the file `.cursor/mcp.json` in your project root.
+2.  Add the following configuration:
+
+    ```json
+    {
+      "mcpServers": {
+        "selfhosted-supabase": { 
+          "command": "node",
+          "args": [
+            "<path-to-dist/index.js>", // e.g., "F:/Projects/mcp-servers/self-hosted-supabase-mcp/dist/index.js"
+            "--url",
+            "<your-supabase-url>", // e.g., "http://localhost:8000"
+            "--anon-key",
+            "<your-anon-key>",
+            // Optional - Add these if needed by the tools you use
+            "--service-key",
+            "<your-service-key>",
+            "--db-url",
+            "<your-db-url>", // e.g., "postgresql://postgres:password@host:port/postgres"
+            "--jwt-secret",
+            "<your-jwt-secret>"
+          ]
+        }
+      }
+    }
+    ```
+
+### Visual Studio Code (Copilot)
+
+VS Code Copilot allows using environment variables populated via prompted inputs, which is more secure for keys.
+
+1.  Create or open the file `.vscode/mcp.json` in your project root.
+2.  Add the following configuration:
+
+    ```json
+    {
+      "inputs": [
+        { "type": "promptString", "id": "sh-supabase-url", "description": "Self-Hosted Supabase URL", "default": "http://localhost:8000" },
+        { "type": "promptString", "id": "sh-supabase-anon-key", "description": "Self-Hosted Supabase Anon Key", "password": true },
+        { "type": "promptString", "id": "sh-supabase-service-key", "description": "Self-Hosted Supabase Service Key (Optional)", "password": true, "required": false },
+        { "type": "promptString", "id": "sh-supabase-db-url", "description": "Self-Hosted Supabase DB URL (Optional)", "password": true, "required": false },
+        { "type": "promptString", "id": "sh-supabase-jwt-secret", "description": "Self-Hosted Supabase JWT Secret (Optional)", "password": true, "required": false },
+        { "type": "promptString", "id": "sh-supabase-server-path", "description": "Path to self-hosted-supabase-mcp/dist/index.js" }
+      ],
+      "servers": {
+        "selfhosted-supabase": {
+          "command": "node",
+          // Arguments are passed via environment variables set below
+          "args": [
+            "${input:sh-supabase-server-path}"
+           ],
+          "env": {
+            "SUPABASE_URL": "${input:sh-supabase-url}",
+            "SUPABASE_ANON_KEY": "${input:sh-supabase-anon-key}",
+            "SUPABASE_SERVICE_ROLE_KEY": "${input:sh-supabase-service-key}",
+            "DATABASE_URL": "${input:sh-supabase-db-url}",
+            "SUPABASE_AUTH_JWT_SECRET": "${input:sh-supabase-jwt-secret}"
+            // The server reads these environment variables as fallbacks if CLI args are missing
+          }
+        }
+      }
+    }
+    ```
+3.  When you use Copilot Chat in Agent mode (@workspace), it should detect the server. You will be prompted to enter the details (URL, keys, path) when the server is first invoked.
+
+### Other Clients (Windsurf, Cline, Claude)
+
+Adapt the configuration structure shown for Cursor or the official Supabase documentation, replacing the `command` and `args` with the `node` command and the arguments for this server, similar to the Cursor example:
+
+```json
+{
+  "mcpServers": {
+    "selfhosted-supabase": { 
+      "command": "node",
+      "args": [
+        "<path-to-dist/index.js>", 
+        "--url", "<your-supabase-url>", 
+        "--anon-key", "<your-anon-key>", 
+        // Optional args...
+        "--service-key", "<your-service-key>", 
+        "--db-url", "<your-db-url>", 
+        "--jwt-secret", "<your-jwt-secret>" 
+      ]
+    }
+  }
+}
+```
+Consult the specific documentation for each client on where to place the `mcp.json` or equivalent configuration file.
+
 ## Development
 
 *   **Language:** TypeScript
