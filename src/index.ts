@@ -33,6 +33,10 @@ import listStorageBucketsTool from './tools/list_storage_buckets.js';
 import listStorageObjectsTool from './tools/list_storage_objects.js';
 import listRealtimePublicationsTool from './tools/list_realtime_publications.js';
 
+// Node.js built-in modules
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
 // Define the structure expected by MCP for tool definitions
 interface McpToolSchema {
     name: string;
@@ -63,6 +67,7 @@ async function main() {
         .option('--service-key <key>', 'Supabase service role key (optional)', process.env.SUPABASE_SERVICE_ROLE_KEY)
         .option('--db-url <url>', 'Direct database connection string (optional, for pg fallback)', process.env.DATABASE_URL)
         .option('--jwt-secret <secret>', 'Supabase JWT secret (optional, needed for some tools)', process.env.SUPABASE_AUTH_JWT_SECRET)
+        .option('--tools-config <path>', 'Path to a JSON file specifying which tools to enable (e.g., { "enabledTools": ["tool1", "tool2"] }). If omitted, all tools are enabled.')
         .parse(process.argv);
 
     const options = program.opts();
@@ -114,9 +119,68 @@ async function main() {
             [listRealtimePublicationsTool.name]: listRealtimePublicationsTool as AppTool,
         };
 
+        // --- Tool Filtering Logic ---
+        let registeredTools: Record<string, AppTool> = { ...availableTools }; // Start with all tools
+        const toolsConfigPath = options.toolsConfig as string | undefined;
+        let enabledToolNames: Set<string> | null = null; // Use Set for efficient lookup
+
+        if (toolsConfigPath) {
+            try {
+                const resolvedPath = path.resolve(toolsConfigPath);
+                console.error(`Attempting to load tool configuration from: ${resolvedPath}`);
+                if (!fs.existsSync(resolvedPath)) {
+                    throw new Error(`Tool configuration file not found at ${resolvedPath}`);
+                }
+                const configFileContent = fs.readFileSync(resolvedPath, 'utf-8');
+                const configJson = JSON.parse(configFileContent);
+
+                if (!configJson || typeof configJson !== 'object' || !Array.isArray(configJson.enabledTools)) {
+                     throw new Error('Invalid config file format. Expected { "enabledTools": ["tool1", ...] }.');
+                }
+
+                // Validate that enabledTools contains only strings
+                const toolNames = configJson.enabledTools as unknown[];
+                if (!toolNames.every((name): name is string => typeof name === 'string')) {
+                    throw new Error('Invalid config file content. "enabledTools" must be an array of strings.');
+                }
+
+                enabledToolNames = new Set(toolNames.map(name => name.trim()).filter(name => name.length > 0));
+
+            } catch (error: unknown) {
+                console.error(`Error loading or parsing tool config file '${toolsConfigPath}':`, error instanceof Error ? error.message : String(error));
+                console.error('Falling back to enabling all tools due to config error.');
+                enabledToolNames = null; // Reset to null to signify fallback
+            }
+        }
+
+        if (enabledToolNames !== null) { // Check if we successfully got names from config
+            console.error(`Whitelisting tools based on config: ${Array.from(enabledToolNames).join(', ')}`);
+
+            registeredTools = {}; // Reset and add only whitelisted tools
+            for (const toolName in availableTools) {
+                if (enabledToolNames.has(toolName)) {
+                    registeredTools[toolName] = availableTools[toolName];
+                } else {
+                    console.error(`Tool ${toolName} disabled (not in config whitelist).`);
+                }
+            }
+
+            // Check if any tools specified in the config were not found in availableTools
+            for (const requestedName of enabledToolNames) {
+                if (!availableTools[requestedName]) {
+                    console.warn(`Warning: Tool "${requestedName}" specified in config file not found.`);
+                }
+            }
+        } else {
+            console.error("No valid --tools-config specified or error loading config, enabling all available tools.");
+            // registeredTools already defaults to all tools, so no action needed here
+        }
+        // --- End Tool Filtering Logic ---
+
         // Prepare capabilities for the Server constructor
         const capabilitiesTools: Record<string, McpToolSchema> = {};
-        for (const tool of Object.values(availableTools)) {
+        // Use the potentially filtered 'registeredTools' map
+        for (const tool of Object.values(registeredTools)) {
             // Directly use mcpInputSchema - assumes it exists and is correct
             const staticInputSchema = tool.mcpInputSchema || { type: 'object', properties: {} };
 
@@ -151,9 +215,15 @@ async function main() {
 
         server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const toolName = request.params.name;
-            const tool = availableTools[toolName as keyof typeof availableTools];
+            // Look up the tool in the filtered 'registeredTools' map
+            const tool = registeredTools[toolName as keyof typeof registeredTools];
 
             if (!tool) {
+                // Check if it existed originally but was filtered out
+                if (availableTools[toolName as keyof typeof availableTools]) {
+                     throw new McpError(ErrorCode.MethodNotFound, `Tool "${toolName}" is available but not enabled by the current server configuration.`);
+                }
+                // If the tool wasn't in the original list either, it's unknown
                 throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
             }
 

@@ -95,6 +95,7 @@ The server requires configuration details for your Supabase instance. These can 
 *   `--service-key <key>` or `SUPABASE_SERVICE_ROLE_KEY=<key>`: Your Supabase project's service role key. Needed for operations requiring elevated privileges, like attempting to automatically create the `execute_sql` helper function if it doesn't exist.
 *   `--db-url <url>` or `DATABASE_URL=<url>`: The direct PostgreSQL connection string for your Supabase database (e.g., `postgresql://postgres:password@localhost:5432/postgres`). Required for tools needing direct database access or transactions (`apply_migration`, Auth tools, Storage tools, querying `pg_catalog`, etc.).
 *   `--jwt-secret <secret>` or `SUPABASE_AUTH_JWT_SECRET=<secret>`: Your Supabase project's JWT secret. Needed for tools like `verify_jwt_secret`.
+*   `--tools-config <path>`: Path to a JSON file specifying which tools to enable (whitelist). If omitted, all tools defined in the server are enabled. The file should have the format `{"enabledTools": ["tool_name_1", "tool_name_2"]}`.
 
 ### Important Notes:
 
@@ -109,11 +110,15 @@ Run the server using Node.js, providing the necessary configuration:
 # Using CLI arguments (example)
 node dist/index.js --url http://localhost:8000 --anon-key <your-anon-key> --db-url postgresql://postgres:password@localhost:5432/postgres [--service-key <your-service-key>]
 
+# Example with tool whitelisting via config file
+node dist/index.js --url http://localhost:8000 --anon-key <your-anon-key> --tools-config ./mcp-tools.json
+
 # Or configure using environment variables and run:
 # export SUPABASE_URL=http://localhost:8000
 # export SUPABASE_ANON_KEY=<your-anon-key>
 # export DATABASE_URL=postgresql://postgres:password@localhost:5432/postgres
 # export SUPABASE_SERVICE_ROLE_KEY=<your-service-key>
+# The --tools-config option MUST be passed as a CLI argument if used
 node dist/index.js
 
 # Using npm start script (if configured in package.json to pass args/read env)
@@ -153,7 +158,10 @@ Below are examples of how to configure popular MCP clients to use this self-host
             "--db-url",
             "<your-db-url>", // e.g., "postgresql://postgres:password@host:port/postgres"
             "--jwt-secret",
-            "<your-jwt-secret>"
+            "<your-jwt-secret>",
+            // Optional - Whitelist specific tools
+            "--tools-config",
+            "<path-to-your-mcp-tools.json>" // e.g., "./mcp-tools.json"
           ]
         }
       }
@@ -175,14 +183,22 @@ VS Code Copilot allows using environment variables populated via prompted inputs
         { "type": "promptString", "id": "sh-supabase-service-key", "description": "Self-Hosted Supabase Service Key (Optional)", "password": true, "required": false },
         { "type": "promptString", "id": "sh-supabase-db-url", "description": "Self-Hosted Supabase DB URL (Optional)", "password": true, "required": false },
         { "type": "promptString", "id": "sh-supabase-jwt-secret", "description": "Self-Hosted Supabase JWT Secret (Optional)", "password": true, "required": false },
-        { "type": "promptString", "id": "sh-supabase-server-path", "description": "Path to self-hosted-supabase-mcp/dist/index.js" }
+        { "type": "promptString", "id": "sh-supabase-server-path", "description": "Path to self-hosted-supabase-mcp/dist/index.js" },
+        { "type": "promptString", "id": "sh-supabase-tools-config", "description": "Path to tools config JSON (Optional, e.g., ./mcp-tools.json)", "required": false }
       ],
       "servers": {
         "selfhosted-supabase": {
           "command": "node",
-          // Arguments are passed via environment variables set below
+          // Arguments are passed via environment variables set below OR direct args for non-env options
           "args": [
-            "${input:sh-supabase-server-path}"
+            "${input:sh-supabase-server-path}",
+            // Use direct args for options not easily map-able to standard env vars like tools-config
+            // Check if tools-config input is provided before adding the argument
+            ["--tools-config", "${input:sh-supabase-tools-config}"] 
+            // Alternatively, pass all as args if simpler:
+            // "--url", "${input:sh-supabase-url}",
+            // "--anon-key", "${input:sh-supabase-anon-key}",
+            // ... etc ... 
            ],
           "env": {
             "SUPABASE_URL": "${input:sh-supabase-url}",
@@ -214,7 +230,9 @@ Adapt the configuration structure shown for Cursor or the official Supabase docu
         // Optional args...
         "--service-key", "<your-service-key>", 
         "--db-url", "<your-db-url>", 
-        "--jwt-secret", "<your-jwt-secret>" 
+        "--jwt-secret", "<your-jwt-secret>",
+        // Optional tools config
+        "--tools-config", "<path-to-your-mcp-tools.json>"
       ]
     }
   }

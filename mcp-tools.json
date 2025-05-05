@@ -1,0 +1,6 @@
+{
+    "enabledTools": [
+    "list_tables",
+    "execute_sql"
+    ]
+}
