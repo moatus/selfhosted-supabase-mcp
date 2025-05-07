@@ -1,6 +1,7 @@
 # Self-Hosted Supabase MCP Server
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![smithery badge](https://smithery.ai/badge/@HenkDz/selfhosted-supabase-mcp)](https://smithery.ai/server/@HenkDz/selfhosted-supabase-mcp)
 
 ## Overview
 
@@ -57,6 +58,14 @@ The server exposes the following tools to MCP clients:
 *(Note: `get_logs` was initially planned but skipped due to implementation complexities in a self-hosted environment).*
 
 ## Setup and Installation
+
+### Installing via Smithery
+
+To install Self-Hosted Supabase MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@HenkDz/selfhosted-supabase-mcp):
+
+```bash
+npx -y @smithery/cli install @HenkDz/selfhosted-supabase-mcp --client claude
+```
 
 ### Prerequisites
 
