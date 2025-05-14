@@ -28,7 +28,7 @@ startCommand:
         type: string
         description: Path to tools config JSON (optional)
   commandFunction:
-    # A JS function that produces the CLI command based on the given config to start the MCP on stdio..
+    # A JS function that produces the CLI command based on the given config to start the MCP on stdio.
     |-
     (config) => {
       const args = [
