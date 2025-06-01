@@ -9,5 +9,6 @@ type LogFunction = (message: string, level?: 'info' | 'warn' | 'error') => void;
 export interface ToolContext {
     selfhostedClient: SelfhostedSupabaseClient;
     log: LogFunction; // Explicitly define the log function
+    workspacePath?: string; // Path to the workspace root
     [key: string]: unknown; // Allow other context properties, though log is now typed
 } 

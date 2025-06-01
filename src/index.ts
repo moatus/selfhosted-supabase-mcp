@@ -67,6 +67,7 @@ async function main() {
         .option('--service-key <key>', 'Supabase service role key (optional)', process.env.SUPABASE_SERVICE_ROLE_KEY)
         .option('--db-url <url>', 'Direct database connection string (optional, for pg fallback)', process.env.DATABASE_URL)
         .option('--jwt-secret <secret>', 'Supabase JWT secret (optional, needed for some tools)', process.env.SUPABASE_AUTH_JWT_SECRET)
+        .option('--workspace-path <path>', 'Workspace root path (for file operations)', process.cwd())
         .option('--tools-config <path>', 'Path to a JSON file specifying which tools to enable (e.g., { "enabledTools": ["tool1", "tool2"] }). If omitted, all tools are enabled.')
         .parse(process.argv);
 
@@ -241,6 +242,7 @@ async function main() {
                 // Create the context object using the imported type
                 const context: ToolContext = {
                     selfhostedClient,
+                    workspacePath: options.workspacePath as string,
                     log: (message, level = 'info') => {
                         // Simple logger using console.error (consistent with existing logs)
                         console.error(`[${level.toUpperCase()}] ${message}`);

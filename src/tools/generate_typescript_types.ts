@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { writeFileSync } from 'fs';
+import { resolve } from 'path';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
 // import type { McpToolDefinition } from '@modelcontextprotocol/sdk/types.js'; // Removed incorrect import
 import type { ToolContext } from './types.js';
@@ -7,6 +9,8 @@ import { runExternalCommand } from './utils.js'; // Need a new helper for runnin
 // Input schema
 const GenerateTypesInputSchema = z.object({
     included_schemas: z.array(z.string()).optional().default(['public']).describe('Database schemas to include in type generation.'),
+    output_filename: z.string().optional().default('database.types.ts').describe('Filename to save the generated types to in the workspace root.'),
+    output_path: z.string().optional().describe('Absolute path where to save the file. If provided, output_filename will be ignored.'),
 });
 type GenerateTypesInput = z.infer<typeof GenerateTypesInputSchema>;
 
@@ -15,6 +19,7 @@ const GenerateTypesOutputSchema = z.object({
     success: z.boolean(),
     message: z.string().describe('Output message from the generation process.'),
     types: z.string().optional().describe('The generated TypeScript types, if successful.'),
+    file_path: z.string().optional().describe('The absolute path to the saved types file, if successful.'),
 });
 
 // Static JSON Schema for MCP capabilities
@@ -27,8 +32,17 @@ const mcpInputSchema = {
             default: ['public'],
             description: 'Database schemas to include in type generation.',
         },
+        output_filename: {
+            type: 'string',
+            default: 'database.types.ts',
+            description: 'Filename to save the generated types to in the workspace root.',
+        },
+        output_path: {
+            type: 'string',
+            description: 'Absolute path where to save the file. If provided, output_filename will be ignored.',
+        },
     },
-    required: [], // included_schemas is optional with default
+    required: [], // all parameters are optional with defaults
 };
 
 // The tool definition - No explicit McpToolDefinition type needed
@@ -74,11 +88,30 @@ export const generateTypesTool = {
                  // Treat stderr as non-fatal for now, maybe just warnings
             }
 
-            console.error('Type generation successful.');
+            // Save the generated types to the specified path
+            const outputPath = input.output_path 
+                ? resolve(input.output_path) // Use absolute path if provided
+                : resolve(context.workspacePath || process.cwd(), input.output_filename); // Fallback to workspace root + filename
+            
+            try {
+                writeFileSync(outputPath, stdout, 'utf8');
+                console.error(`Types saved to: ${outputPath}`);
+            } catch (writeError) {
+                const writeErrorMessage = writeError instanceof Error ? writeError.message : String(writeError);
+                console.error(`Failed to write types file: ${writeErrorMessage}`);
+                return {
+                    success: false,
+                    message: `Type generation succeeded but failed to save file: ${writeErrorMessage}`,
+                    types: stdout,
+                };
+            }
+
+            console.error('Type generation and file save successful.');
             return {
                 success: true,
-                message: `Types generated successfully.${stderr ? `\nWarnings:\n${stderr}` : ''}`,
+                message: `Types generated successfully and saved to ${outputPath}.${stderr ? `\nWarnings:\n${stderr}` : ''}`,
                 types: stdout,
+                file_path: outputPath,
             };
 
         } catch (err: unknown) {
