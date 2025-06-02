@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { SqlExecutionResult, SqlErrorResponse } from '../types/index.js';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import type { SelfhostedSupabaseClient } from '../client/index.js';
 
 const execAsync = promisify(exec);
 
@@ -13,34 +14,23 @@ export function isSqlErrorResponse(result: SqlExecutionResult): result is SqlErr
 }
 
 /**
- * Handles the response from SQL execution (via RPC or pg).
- * Checks for errors, parses the data using the provided Zod schema,
- * and throws an error if parsing fails or if the database returned an error.
+ * Handles SQL execution results and validates them against the expected schema.
+ * Throws an error if the result contains an error or doesn't match the schema.
  */
-export function handleSqlResponse<T extends z.ZodTypeAny>(
-    result: SqlExecutionResult,
-    schema: T
-): z.infer<T> {
-    if (isSqlErrorResponse(result)) {
-        // Throw an error that the MCP SDK can potentially catch and format
-        throw new Error(`SQL Error (${result.error.code || 'UNKNOWN'}): ${result.error.message}`);
+export function handleSqlResponse<T>(result: SqlExecutionResult, schema: z.ZodSchema<T>): T {
+    // Check if the result contains an error
+    if ('error' in result) {
+        throw new Error(`SQL Error (${result.error.code}): ${result.error.message}`);
     }
 
-    // If it's not an error, it should be SqlSuccessResponse (unknown[])
+    // Validate the result against the schema
     try {
-        // Parse the data (which should be unknown[] according to SqlSuccessResponse)
-        const parsedData = schema.parse(result);
-        return parsedData;
-    } catch (validationError: unknown) {
-        // Handle Zod validation errors
+        return schema.parse(result);
+    } catch (validationError) {
         if (validationError instanceof z.ZodError) {
-             console.error("Zod validation failed:", validationError.errors);
-             throw new Error(`Output validation failed: ${validationError.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
+            throw new Error(`Schema validation failed: ${validationError.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
         }
-        // Handle other potential errors during parsing
-        console.error("Error parsing SQL response:", validationError);
-        const message = validationError instanceof Error ? validationError.message : String(validationError);
-        throw new Error(`Failed to parse SQL response: ${message}`);
+        throw new Error(`Unexpected validation error: ${validationError}`);
     }
 }
 
@@ -65,4 +55,24 @@ export async function runExternalCommand(command: string): Promise<{
             error: execError,
         };
     }
+}
+
+/**
+ * Executes SQL using the best available method: direct database connection first, then RPC fallback.
+ * This bypasses JWT authentication issues when direct database access is available.
+ */
+export async function executeSqlWithFallback(
+    client: SelfhostedSupabaseClient, 
+    sql: string, 
+    readOnly: boolean = true
+): Promise<SqlExecutionResult> {
+    // Try direct database connection first (bypasses JWT authentication)
+    if (client.isPgAvailable()) {
+        console.error('Using direct database connection (bypassing JWT)...');
+        return await client.executeSqlWithPg(sql);
+    }
+    
+    // Fallback to RPC if direct connection not available
+    console.error('Falling back to RPC method...');
+    return await client.executeSqlViaRpc(sql, readOnly);
 } 

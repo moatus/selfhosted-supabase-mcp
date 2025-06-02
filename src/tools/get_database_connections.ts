@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
-import { handleSqlResponse } from './utils.js';
+import { handleSqlResponse, executeSqlWithFallback } from './utils.js';
 import type { ToolContext } from './types.js';
 
 // Schema for the output: array of connection details
@@ -58,7 +58,7 @@ export const getDatabaseConnectionsTool = {
                 backend_start
         `;
 
-        const result = await client.executeSqlViaRpc(getConnectionsSql, true);
+        const result = await executeSqlWithFallback(client, getConnectionsSql, true);
 
         return handleSqlResponse(result, GetDbConnectionsOutputSchema);
     },

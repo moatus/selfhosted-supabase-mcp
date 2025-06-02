@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
 import type { ToolContext } from './types.js';
-import { handleSqlResponse } from './utils.js';
+import { handleSqlResponse, executeSqlWithFallback } from './utils.js';
 
 // Schema for the output: array of migration details
 const ListMigrationsOutputSchema = z.array(z.object({
@@ -45,7 +45,7 @@ export const listMigrationsTool = {
 
         // This table might not exist if migrations haven't been run
         // The RPC call will handle the error, which handleSqlResponse will catch
-        const result = await client.executeSqlViaRpc(listMigrationsSql, true);
+        const result = await executeSqlWithFallback(client, listMigrationsSql, true);
 
         return handleSqlResponse(result, ListMigrationsOutputSchema);
     },

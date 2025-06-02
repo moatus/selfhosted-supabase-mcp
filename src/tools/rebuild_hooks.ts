@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
 // import type { McpToolDefinition } from '@modelcontextprotocol/sdk'; // Removed incorrect import
-import { handleSqlResponse, isSqlErrorResponse } from './utils.js';
+import { handleSqlResponse, executeSqlWithFallback } from './utils.js';
 import type { ToolContext } from './types.js';
 
 // Input schema (none needed)
@@ -37,15 +37,16 @@ export const rebuildHooksTool = {
 
         try {
             console.error('Attempting to restart pg_net worker...');
-            const result = await client.executeSqlViaRpc(restartSql, false); // Not strictly read-only
+            const result = await executeSqlWithFallback(client, restartSql, false);
 
-            if (isSqlErrorResponse(result)) {
-                 // Specific check for function not found (pg_net might not be installed/active)
-                 const notFound = result.error.code === '42883'; // undefined_function
+            // Check if the result contains an error
+            if ('error' in result) {
+                // Specific check for function not found (pg_net might not be installed/active)
+                const notFound = result.error.code === '42883'; // undefined_function
                 const message = `Failed to restart pg_net worker: ${result.error.message}${notFound ? ' (Is pg_net installed and enabled?)' : ''}`;
-                 console.error(message);
-                 return { success: false, message };
-             }
+                console.error(message);
+                return { success: false, message };
+            }
 
             // If no error, assume success
             console.error('pg_net worker restart requested successfully.');
@@ -53,7 +54,7 @@ export const rebuildHooksTool = {
 
         } catch (error: unknown) {
             // Catch exceptions during the RPC call itself
-             const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
             console.error(`Exception attempting to restart pg_net worker: ${errorMessage}`);
             return { success: false, message: `Exception attempting to restart pg_net worker: ${errorMessage}` };
         }

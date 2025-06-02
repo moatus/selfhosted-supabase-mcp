@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
 // import type { McpToolDefinition } from '@modelcontextprotocol/sdk'; // Removed incorrect import
-import { handleSqlResponse } from './utils.js';
+import { handleSqlResponse, executeSqlWithFallback } from './utils.js';
 import type { ToolContext } from './types.js';
 
 // Input schema
@@ -29,19 +29,16 @@ const mcpInputSchema = {
 // The tool definition - No explicit McpToolDefinition type needed
 export const executeSqlTool = {
     name: 'execute_sql',
-    description: 'Executes an arbitrary SQL query against the database, primarily using the execute_sql RPC function.',
+    description: 'Executes an arbitrary SQL query against the database, using direct database connection when available or RPC function as fallback.',
     inputSchema: ExecuteSqlInputSchema,
     mcpInputSchema: mcpInputSchema,
     outputSchema: ExecuteSqlOutputSchema,
     execute: async (input: ExecuteSqlInput, context: ToolContext) => {
         const client = context.selfhostedClient;
 
-        // TODO: Add logic for optional direct connection if needed
-
         console.error(`Executing SQL (readOnly: ${input.read_only}): ${input.sql.substring(0, 100)}...`);
-        const result = await client.executeSqlViaRpc(input.sql, input.read_only);
-
-        // handleSqlResponse will throw on SQL errors or validation errors
+        
+        const result = await executeSqlWithFallback(client, input.sql, input.read_only);
         return handleSqlResponse(result, ExecuteSqlOutputSchema);
     },
 }; 
