@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
-import { handleSqlResponse } from './utils.js';
+import { handleSqlResponse, executeSqlWithFallback } from './utils.js';
 import type { ToolContext } from './types.js';
 
 // Define the schema for the tool's output (an array of table names)
@@ -62,7 +62,7 @@ export const listTablesTool = {
                 c.relname
         `;
 
-        const result = await client.executeSqlViaRpc(listTablesSql, true); // Use read-only flag
+        const result = await executeSqlWithFallback(client, listTablesSql, true);
 
         return handleSqlResponse(result, ListTablesOutputSchema); // Use a helper to handle response/errors
     },

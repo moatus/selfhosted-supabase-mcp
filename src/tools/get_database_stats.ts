@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
-import { handleSqlResponse } from './utils.js';
+import { handleSqlResponse, executeSqlWithFallback } from './utils.js';
 import type { ToolContext } from './types.js';
 
 // Schema for combined stats output
@@ -111,8 +111,8 @@ export const getDatabaseStatsTool = {
 
         // Execute both queries
         const [dbStatsResult, bgWriterStatsResult] = await Promise.all([
-            client.executeSqlViaRpc(getDbStatsSql, true),
-            client.executeSqlViaRpc(getBgWriterStatsSql, true),
+            executeSqlWithFallback(client, getDbStatsSql, true),
+            executeSqlWithFallback(client, getBgWriterStatsSql, true),
         ]);
 
         // Use handleSqlResponse for each part; it throws on error.

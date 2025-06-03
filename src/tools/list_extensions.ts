@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
-import { handleSqlResponse } from './utils.js';
+import { handleSqlResponse, executeSqlWithFallback } from './utils.js';
 import type { ToolContext } from './types.js';
 
 // Schema for the output: array of extension details
@@ -50,7 +50,7 @@ export const listExtensionsTool = {
                 pe.extname
         `;
 
-        const result = await client.executeSqlViaRpc(listExtensionsSql, true);
+        const result = await executeSqlWithFallback(client, listExtensionsSql, true);
 
         return handleSqlResponse(result, ListExtensionsOutputSchema);
     },
