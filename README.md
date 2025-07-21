@@ -78,7 +78,7 @@ npx -y @smithery/cli install @HenkDz/selfhosted-supabase-mcp --client claude
 1.  **Clone the repository:**
     ```bash
     git clone <repository-url>
-    cd self-hosted-supabase-mcp
+    cd selfhosted-supabase-mcp
     ```
 2.  **Install dependencies:**
     ```bash
