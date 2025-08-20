@@ -1,28 +1,41 @@
 {
   "name": "self-hosted-supabase-mcp",
   "version": "1.0.0",
-  "description": "",
+  "description": "Remote HTTP-accessible MCP server for self-hosted Supabase instances",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsup src/index.ts --format esm --clean",
+    "build:remote": "tsup src/remote-server.ts --format esm --clean --out-dir dist-remote",
     "start": "node dist/index.js",
+    "start:remote": "node dist-remote/remote-server.js",
     "dev": "tsup src/index.ts --format esm --watch",
+    "dev:remote": "tsup src/remote-server.ts --format esm --watch --out-dir dist-remote",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "mcp",
+    "supabase",
+    "remote",
+    "http"
+  ],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@hono/node-server": "^1.19.0",
     "@modelcontextprotocol/sdk": "latest",
     "@supabase/supabase-js": "^2.49.4",
     "commander": "^13.1.0",
+    "hono": "^4.9.2",
     "pg": "^8.15.6",
-    "zod": "^3.24.3"
+    "workers-mcp": "^0.0.13",
+    "zod": "^3.24.3",
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
     "@types/pg": "^8.11.14",
+    "node-fetch": "^3.3.2",
     "tsup": "^8.4.0",
     "typescript": "^5.8.3"
   }
